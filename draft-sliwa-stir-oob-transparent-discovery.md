@@ -29,9 +29,13 @@ venue:
 
 author:
  -
-    fullname: Your Name Here
-    organization: Your Organization Here
-    email: your.email@example.com
+    fullname: Rob Sliwa
+    organization: Somos Inc.
+    email: robjsliwa@gmail.com
+ -
+    fullname: Chris Wendt
+    organization: Somos Inc.
+    email: chris@appliedbits.com
 
 normative:
 
