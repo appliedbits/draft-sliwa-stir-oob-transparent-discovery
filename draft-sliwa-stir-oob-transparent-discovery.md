@@ -2,11 +2,11 @@
 ###
 # Discovery of STIR Out‑of‑Band Call Placement Services
 ###
-title: "Discovery of STIR Out‑of‑Band Call Placement Services"
+title: "Transparent Discovery of STIR Out‑of‑Band Call Placement Services"
 abbrev: "Discovery of STIR OOB CPS"
 category: std
 
-docname: draft-stir-oob-discovery
+docname: draft-sliwa-stir-oob-transparent-discovery-00
 submissiontype: IETF  # also: "independent", "editorial", "IAB", or "IRTF"
 number:
 date:
@@ -24,8 +24,8 @@ venue:
   type: "Working Group"
   mail: "stir@ietf.org"
   arch: "https://mailarchive.ietf.org/arch/browse/stir/"
-  github: "appliedbits/draft-stir-oob-discovery"
-  latest: "https://github.com/appliedbits/draft-stir-oob-discovery"
+  github: "appliedbits/draft-sliwa-stir-oob-transparent-discovery"
+  latest: "https://github.com/appliedbits/draft-sliwa-stir-oob-transparent-discovery"
 
 author:
  -
@@ -38,313 +38,138 @@ author:
     email: chris@appliedbits.com
 
 normative:
+  I-D.sliwa-stir-cert-cps-ext:
+  I-D.wendt-stir-certificate-transparency:
+  RFC8224:
+  RFC8225:
+  RFC8226:
+  RFC8816:
+  RFC9060:
 
 informative:
 
-...
 
 --- abstract
 
-This document defines a Discovery Service for STIR Out-of-Band (OOB) Call Placement Services (CPS).
+This document defines a Discovery Service for STIR Out-of-Band (OOB) Call Placement Services (CPS). The Discovery Service enables Authentication Services (AS) and Verification Services (VS) to quickly determine which CPS is responsible for a given telephone number (TN) or Service Provider Code (SPC), allowing retrieval of PASSporTs even when SIP Identity headers are removed by non-IP or hybrid network segments. The Discovery Service leverages a CPS URI certificate extension, which allows STIR Certificates or Delegate Certificates to embed an HTTPS URI for the CPS serving the TNs or SPCs covered by the certificate. 
 
-The Discovery Service enables Authentication Services (AS) and Verification Services (VS) to quickly determine which CPS is responsible for a given telephone number (TN) or Service Provider Code (SPC), allowing retrieval of PASSporTs even when SPI Identity headers are removed by non-IP or hybrid network segments.
-
-The Discovery Service leverages the CPS URI certificate extension defined in [I-D.draft-stir-cert-cps]](https://github.com/appliedbits/draft-stir-cert-cps/blob/main/draft-stir-cert-cps.md), which allows Delegate Certificates to embed an HTTPS URI for the CPS serving the TNs or SPCs covered by the certificate. A built-in monitoring component continuously watches STI Certificate Transparency (STI-CT) logs for new or updated certificates containing this extension, automatically registering TN->CPS and SPC->CPS mappings. These mappings are exposed via a simple REST API for fast lookups, eliminating the need for bilateral provisioning and enabling transparent, cryptographically verifiable CPS discovery.
+A built-in monitoring component continuously watches STI Certificate Transparency (STI-CT) logs for new or updated certificates containing this extension, automatically registering TN->CPS and SPC->CPS mappings. These mappings are exposed via a simple REST API for fast lookups, eliminating the need for bilateral provisioning and enabling transparent, cryptographically verifiable CPS discovery.
 
 
 --- middle
 
 # Introduction
 
-The Discovery Service specified in this document provides a scalable, cryptographically verifiable way to determine which CPS is responsible for a given TN or SPC when performing STIR/SHAKEN Out‑of‑Band call authentication as described in {{RFC8816}}.
+In a STIR ecosystem, defined primarily by {{RFC8224}}, {{RFC8225}}, and {{RFC8226}}, and specifically when enabling Out-of-Band (OOB) delivery of PASSporTs defined in {{RFC8816}}, a Call Placement Service (CPS) plays a vital role, particularly when SIP Identity headers are lost or removed in non-IP or hybrid network environments. While the role of CPS was well established in {{RFC8816}}, the challenge remained for the definition of discovering which CPS is responsible for a specific telephone number (TN) or Service Provider Code (SPC) in a secure, scalable, and interoperable way.  
 
-The Discovery Service leverages the CPS URI certificate extension defined in [I-D.draft-stir-cert-cps]](https://github.com/appliedbits/draft-stir-cert-cps/blob/main/draft-stir-cert-cps.md). This extension allows Delegate Certificates to embed an HTTPS URI that points to the CPS serving the TNs or SPCs covered by that certificate’s TNAuthList. When these certificates are published to the STI‑CT logs, their CPS URIs become immediately visible and auditable by the ecosystem.
+This document introduces a CPS Discovery Service designed to solve that challenge. The CPS Discovery Service provides a transparent and cryptographically verifiable method for identifying the correct CPS for any given TN or SPC, supporting OOB call authentication without requiring static configuration or bilateral agreements between service providers.
 
-The Discovery Service continuously monitors STI‑CT logs to learn new and updated certificate registrations, automatically extracting the TN → CPS and SPC → CPS mappings from any CPS URIs present. These mappings are stored in the Discovery Service and exposed via a simple REST API that supports fast, one call lookups by Authentication Services and Verification Services. This means that:
+The CPS Discovery Service operates by leveraging the CPS URI certificate extension defined in {{I-D.sliwa-stir-cert-cps-ext}}. This extension allows STIR Certificates {{RFC8226}} or Delegate Certificates {{RFC9060}} to encode an HTTPS URI pointing to the CPS responsible for the TNs or SPCs listed in the certificate's TNAuthList. Once such certificates are published to STIR Certificate Transparency (STI-CT) logs defined in {{I-D.wendt-stir-certificate-transparency}}, the CPS URI becomes immediately visible, audit-able, and publicly verifiable by relying parties.
 
-- Originating AS implementations can find the correct CPS endpoint with a single lookup instead of relying on bilateral provisioning or static configuration.
-- Terminating VS implementations can verify PASSporTs published to the correct CPS, even when SIP Identity headers are stripped by non‑IP or hybrid network segments.
-- The ecosystem gains continuous monitoring of certificate issuance and CPS endpoint registrations, ensuring rapid detection of misconfigurations or mis‑issuance.
+To facilitate CPS discovery, the Discovery Service continuously monitors these CT logs, extracts CPS URIs from newly issued or updated certificates, and registers mappings from TNs or SPCs to CPS endpoints. These mappings are exposed via a simple REST API that supports fast, automated lookups by Authentication Services (AS) and Verification Services (VS). 
 
-Combination of CPS URI certificate extensions with STI‑CT log monitoring and a simple REST query interface, the Discovery Service enables zero‑touch OOB CPS discovery while remaining fully backward‑compatible with existing OOB publish and retrieve APIs. Verifiers and originators only need to add one new lookup step to gain reliable and scale discovery of OOB PASSporTs.
+By combining CPS URI certificate extensions with CT monitoring and a queryable discovery interface, this approach enables automatic OOB CPS discovery. It can integrate with existing STIR framework components and requires only an additional lookup step to improve the robustness and scalability of Out-of-Band PASSporT delivery.
 
 # Architectural Overview
 
-## Design Goals
+This document defines a mechanism for discovering Call Placement Services (CPS) responsible for specific telephone numbers (TNs) or Service Provider Codes (SPCs) by monitoring STI Certificate Transparency (STI-CT) logs for certificates that include a CPS URI extension.
 
-- Open registration - Any authenticated holder of RTU evidence can publish a CPS for TNs it controls.
-- Zero manual peering - Originators and receivers discover the CPS with one lookup and no bilateral agreement.
-- Cryptographic binding - The discovery record and the CPS‑URI certificate extension are both verifiable against the same RTU trust anchor.
-- Transparency - All CPS bindings are logged in STI‑CT and continuously monitored for mis‑issuance.
-- Backward compatibility - No changes to OOB publish/retrieve APIs. Discovery is purely additive.
+Entities that operate a CPS obtain delegate certificates with TNAuthList entries covering the TNs or SPCs they serve. These certificates include a CPS URI extension as defined in {{I-D.sliwa-stir-cert-cps-ext}}, indicating the HTTPS endpoint of the CPS. Once issued, these certificates are submitted to STI-CT logs.
 
-## Components
+Any relying party may monitor STI-CT logs for new or updated certificates containing a CPS URI extension. Upon detection, the CPS URI and its associated TNAuthList entries are extracted and recorded. This enables parties to associate TNs or SPCs with corresponding CPS URIs based on the content of logged certificates.
 
-The Discovery Service architecture provides simple and reliable mechanisms for any STIR/SHAKEN entity to find the correct CPS for a TN or SPC.
+This approach provides the following properties:
 
-Following diagram shows the high‑level components and their relationships.
+- Transparency: CPS endpoint declarations are publicly logged and auditable through STI-CT.
+- Verifiability: Mappings are derived from signed certificates anchored in existing STIR trust infrastructure and supported by Signed Certificate Timestamps (SCTs).
+- No bilateral provisioning: Originating and terminating parties do not require prior agreement or static configuration to determine the correct CPS.
+- Compatibility: The mechanism is fully compatible with the STIR Out-of-Band (OOB) architecture as defined in {{RFC8816}} and requires no modification to existing CPS publish or retrieve interfaces.
 
-~~~~~~~~~~~~~
-                +--------------+     Cert w/ CPS‑URI
-          +---->|  STI‑CT Logs |<=================+
-          |     +------+-------+                  |
-          |            ^                          |
-     1. Submit DC      |   CT Monitor             |
-        w/SPC URIs     |  (auto‑registers CPS)    |
-          |            |                          v
-   +-----------+       |   +-------------------+  |  2. Signed
-   | Enterprise|       +---| Discovery Service |<-+--- Advertisement
-   +-----------+           +---------+---------+
-                                     |
-                                     | 3. Lookup
-                                     v
-                             +-------+-------+
-                             |  Originating  |
-                             |      AS       |
-                             +-------+-------+
-                                     |
-                              1. Publish PASSporT
-                                     |
-                                     v
-                             +-------+-------+
-                             |      CPS      |
-                             +-------+-------+
-                                     |
-                              2. Retrieve PASSporT
-                                     |
-                                     v
-                             +-------+-------+
-                             |  Terminating  |
-                             |      VS       |
-                             +---------------+
-~~~~~~~~~~~~~
+This architecture enables a scalable and interoperable means of CPS discovery using existing STIR certificate issuance and transparency mechanisms.
 
-### Call Placement Service (CPS)
+# Components
 
-A CPS is a service endpoint defined by {{RFC8816}} that stores PASSporTs for later retrieval when SIP Identity headers are removed by intermediate networks.  Originating networks publish signed PASSporTs to the destination’s CPS, and terminating networks retrieve them during call verification.
+The discovery mechanism relies on existing STIR framework components and Certificate Transparency (CT) logs. No new interfaces are required between entities. CPS operators signal the location of their service using a certificate extension, and relying parties extract and verify these declarations by monitoring CT logs.
 
-This specification does not modify the CPS publish/retrieve APIs, it only defines how to reliably find the correct CPS endpoint for any TN or SPC.
+## Call Placement Service (CPS)
 
-### Discovery Service
+A Call Placement Service (CPS), as defined in {{RFC8816}}, is a network-accessible endpoint that stores PASSporTs for later retrieval during call verification. CPSs are used when SIP Identity headers are removed or unavailable, such as in non-IP or hybrid telephony environments. Originating entities publish PASSporTs to the CPS associated with the called party's number, and terminating entities retrieve them during call processing.
 
-The Discovery Service provides REST API that allows quick, cryptographically verifiable lookups of CPS endpoints.  It supports two main functions:
+This specification does not modify the behavior or interfaces of CPS endpoints. It only describes how CPS endpoint information is published and discovered using STIR delegate certificates and Certificate Transparency.
 
-- Registration of CPS endpoints – Authorized entities can post signed CPS advertisements that map TN ranges or SPCs to CPS URIs.
-- Lookup of CPS endpoints – Any client (e.g., an Authentication Service or Verification Service) can query the Discovery Service to obtain the correct CPS URI for a given TN or SPC, along with supporting evidence such as certificate fingerprints and Signed Certificate Timestamps (SCTs).
+## Certificate Holders
 
-### Discovery Service STI-CT Monitor Component
+Entities responsible for telephone numbers or SPCs—such as service providers or enterprises—obtain STIR delegate certificates with TNAuthList entries covering those resources. These certificates may optionally include a CPS URI extension indicating the HTTPS endpoint of the CPS that serves those numbers.
 
-The Discovery Service includes an automated monitoring component that continuously watches STI‑CT logs for new or updated certificates.  When a certificate includes the CPS URI extension, the monitor:
+When these certificates are submitted to a recognized STI Certificate Transparency log, the CPS URI becomes visible to relying parties monitoring the log. This allows third parties to discover the CPS associated with a number without requiring pre-provisioning or bilateral configuration.
 
-- Verifies the certificate and its SCTs.
-- Extracts the TNAuthList and CPS URI.
-- Automatically registers or updates the mapping in the Discovery Service database.
-
-This ensures that CPS endpoints referenced in Delegate Certificates become immediately discoverable, even if the operator has not explicitly posted an advertisement.
-
-## CPS Discovery Mechanisms
-
-The Discovery Service provides two complementary paths for finding the correct CPS for a TN or SPC.  Both paths are cryptographically verifiable and can be used independently or together.
-
-### Certificate‑Based Discovery via STI‑CT
-
-The first path leverages the CPS URI certificate extension defined in [I-D.draft-stir-cert-cps]](https://github.com/appliedbits/draft-stir-cert-cps/blob/main/draft-stir-cert-cps.md).  When an entity (for example, an enterprise or carrier) obtains a STIR/SHAKEN delegate certificate that covers one or more TNs, it can include an HTTPS CPS URI in that certificate.  The certificate is then logged in the STI Certificate Transparency (STI‑CT) ecosystem, producing a Signed Certificate Timestamp (SCT) that proves the certificate’s presence in the transparency log.
+## Transparency Log Monitors
 
-Any client (such as an Authentication Service, Verification Service, or directory operator) can query the STI‑CT log to:
+Any party may monitor STI Certificate Transparency logs for certificates containing a CPS URI extension. Upon detecting a new or updated certificate, the monitor performs the following:
 
-- Find certificates whose TNAuthList matches the destination TN or SPC.
-- Read the CPS URI extension to learn where Out‑of‑Band PASSporTs should be published or retrieved.
-- Validate the certificate and its SCTs to ensure that the mapping is trusted and transparently auditable.
-
-This approach requires no pre‑existing registry because the CPS location information travels with the same cryptographic credentials already used for STIR/SHAKEN call authentication.
+- Verifies the certificate chain to a trusted STI root
+- Validates the certificate's Signed Certificate Timestamps (SCTs)
+- Extracts the TNAuthList and CPS URI from the certificate
+- Associates the covered TNs or SPCs with the indicated CPS URI
 
-### Discovery Service with STI‑CT Monitoring
+Monitors may use this data to maintain a local registry or cache of TN→CPS and SPC→CPS mappings. These mappings can be used by Authentication Services or Verification Services during call processing.
 
-The second path uses the Discovery Service API defined in this document. Instead of every client parsing Certificate Transparency logs directly, the Discovery Service operates as an always‑on STI‑CT monitor.  It continuously observes new or updated certificates and automatically extracts CPS URIs from any certificate containing the CPS URI extension.  For each certificate, it verifies SCTs, checks TNAuthList coverage, and records TN→CPS and SPC→CPS mappings in its internal database.
+# CPS Discovery Mechanisms
 
-This means that as soon as a CPS URI is published in a certificate and logged to STI‑CT, it becomes discoverable through a simple REST query:
+This section describes the mechanism by which Call Placement Service (CPS) information is discovered through monitoring of STI Certificate Transparency (STI-CT) logs. This method provides a decentralized, cryptographically verifiable, and interoperable means of associating telephone numbers (TNs) or Service Provider Codes (SPCs) with CPS endpoints.
 
-~~~~~~~~~~~~~
-GET /.well-known/stir-cps-registry/discover?tn=+12025550123
-~~~~~~~~~~~~~
+## Certificate-Based CPS Publication
 
-A client receives a response with:
+CPS operators or entities authorized for telephone numbers or SPCs obtain STIR delegate certificates containing a TNAuthList and the CPS URI certificate extension as defined in [I-D.sliwa-stir-cert-cps-ext]. The CPS URI identifies the HTTPS endpoint where Out-of-Band (OOB) PASSporTs can be published or retrieved for the associated identifiers.
 
-- The CPS URI (e.g., https://cps.example.net/oob/v1)
-- Evidence such as the certificate fingerprint and SCTs
-
-### End‑to‑End Flow
-
-1. Certificate Issuance – An operator obtains a delegate certificate containing a CPS URI and submits it to STI‑CT.
-2. Auto‑Registration – The Discovery Service detects the new certificate via its STI‑CT monitoring component and automatically creates the TN->CPS and SPC->CPS mappings.
-3. Lookup – An originating Authentication Service placing a call queries the Discovery Service for the destination TN.
-4. Publish – The Authentication Service publishes the PASSporT to the returned CPS URI.
-5. Retrieve and Verify – The terminating Verification Service retrieves the PASSporT from that CPS and verifies it.
-
-This flow provides zero‑touch provisioning for Out‑of‑Band PASSporT delivery: operators simply issue certificates containing their CPS URIs, and the Discovery Service handles everything else automatically, providing quick, verifiable lookups for any participant in the STIR/SHAKEN ecosystem.
-
-# Discovery Service API
-
-This section defines the HTTP interface for registering and discovering CPS endpoints. All endpoints MUST be served over HTTPS (TLS 1.2+). The API SHOULD be exposed at a stable base path; this document uses the following well-known locations:
-
-~~~~~~~~~~~~~
-POST /.well-known/stir-cps-registry/advertisements
-GET  /.well-known/stir-cps-registry/discover?tn={+E164}
-GET  /.well-known/stir-cps-registry/discover?spc={ID}
-~~~~~~~~~~~~~
-
-## Common Conventions
-
-- Content Types
-  - Registration requests use application/stir-cps-advertisement+json.
-  - Discovery responses use application/stir-cps-discovery+json.
-- Normalization
-  - tn: parameters MUST be E.164 with leading “+” and no whitespace.
-  - spc: values follow {{RFC8226}} conventions for SPC identifiers.
-- Time: Timestamps are RFC 3339/ISO 8601 UTC.
-- Caching: Discovery responses SHOULD include Cache-Control: max-age=NN and ETag. Clients MAY cache per policy but MUST honor certificate notAfter.
-- Authn/Authz: The server MUST require HTTPS. It SHOULD support mTLS and/or OAuth 2.0 (mTLS or JWT-based client auth). However, acceptance of an Advertisement is ultimately gated by cryptographic proof of control, bearer auth alone is insufficient.  TODO: Provide more details for proof of control via RTU (TNAuthList, SCT)
-
-## Registration API
-
-The Registration API allows authorized entities to assert mappings from TN ranges or SPCs to CPS URIs. Each assertion is an Advertisement signed with the private key corresponding to a STIR certificate whose TNAuthList covers the asserted resources.
-
-## Advertisement Object
-
-Media type: application/stir-cps-advertisement+json
-
-~~~~~~~~~~~~~
-{
-  "version": 1,
-  "jti": "c0a8012e-9b38-4d6a-bfdf-2d3a1a2fe0b7",
-  "resources": [
-    { "tn": "+12025550100/20" },
-    { "spc": "1234" }
-  ],
-  "cps": "https://cps.example.net/oob/v1",
-  "validity": {
-    "notBefore": "2025-08-06T00:00:00Z",
-    "notAfter":  "2026-08-05T23:59:59Z"
-  },
-  "evidence": {
-    "cert": "<base64-DER>"
-  },
-  "signature": "<Detached-JWS-compact>"
-}
-~~~~~~~~~~~~~
-
-- version - Protocol version, MUST be 1.
-- jti - Unique identifier for idempotency and replay protection.
-- resources - Array of objects: either { "tn": "+E164[/prefix]" } or { "spc": "ID" }.
-  - TN ranges **SHOULD** use prefix notation (`+1202555/24`); exact TN use `/15` equivalent (or omit suffix if you prefer exact-match semantics—server **MUST** treat omitted as exact).
-- cps - HTTPS URI for the CPS root as defined in \[I-D.stir-cert-cps].
-- validity - Optional server-enforced bounds. notAfter MUST NOT exceed certificate expiry.
-- evidence.cert - Base64 DER of the certificate containing the TNAuthList. MAY be a delegate or provider certificate.
-- signature - Detached JWS over the UTF-8 bytes of the Advertisement WITHOUT the signature field.
-  - alg MUST correspond to evidence.cert public key.
-  - The JWS header MUST include either x5c (preferred), or kid with a server-resolvable reference to the certificate.
-  - Servers MUST verify the JWS and that the signing cert equals evidence.cert.
-
-## POST /…/advertisements
-
-Request body: Advertisement
-
-Success:
-
-~~~~~~~~~~~~~
-201 Created
-Location: /.well-known/stir-cps-registry/advertisements/{id}
-Content-Type: application/json
-
-{ "id": "{id}", "status": "accepted", "source": "registry" }
-~~~~~~~~~~~~~
-
-Errors:
-
-- 400 Bad Request - Invalid JSON, unknown fields, malformed TN/SPC/CPS URI.
-- 401/403 - Authentication/authorization failure (TLS/OAuth).
-- 409 Conflict - Overlaps with an existing mapping having equal or higher specificity from the SAME certificate and a later notBefore.
-- 422 Unprocessable Entity - JWS invalid, cert chain invalid, TNAuthList does not cover claimed resources, SCT missing/invalid, notAfter beyond cert expiry.
-
-Idempotency: Servers MUST treat identical (jti, cert fingerprint) pairs as idempotent and SHOULD return the same {id}.
-
-## Server Validation
-
-Upon POST, the server MUST:
-
-1. Validate TLS client auth policy (if configured).
-2. Parse and validate the Advertisement schema.
-3. Validate JWS signature, ensure the signing cert equals evidence.cert.
-4. Validate the evidence.cert chain to an accepted STI trust root.
-5. Validate SCTs (structure, signature, and consistency with the cert).
-6. Validate TNAuthList coverage for all resources.
-7. Validate cps is an HTTPS URI per [I-D.draft-stir-cert-cps]](https://github.com/appliedbits/draft-stir-cert-cps/blob/main/draft-stir-cert-cps.md).
-8. Enforce validity window; clamp notAfter to certificate expiry.
-9. Store mappings with appropriate indexes (TN prefix trie, SPC map).
-
-# Discovery API
-
-Lookup returns the CPS URI plus cryptographic evidence. Either tn or spc MUST be specified (not both).
-
-Request
-
-~~~~~~~~~~~~~
-GET /.well-known/stir-cps-registry/discover?tn=+12025550123
-GET /.well-known/stir-cps-registry/discover?spc=1234
-~~~~~~~~~~~~~
-
-Response (success)
-
-~~~~~~~~~~~~~
-{
-  "cps": "https://cps.example.net/oob/v1",
-  "source": "registry",              // or "ct"
-  "matched": {
-    "type": "tn",                    // "tn" or "spc"
-    "value": "+12025550123",
-    "scope": "+1202555/24"           // scope that matched
-  },
-  "evidence": {
-    "cert_fingerprint": "SHA256:4F:..:A9",
-    "notBefore": "2025-08-06T00:00:00Z",
-    "notAfter":  "2026-08-05T23:59:59Z"
-  }
-}
-~~~~~~~~~~~~~
-
-Errors
-
-- 404 Not Found - No valid mapping.
-- 400 Bad Request - Invalid tn/spc.
-- 406 Not Acceptable - accept filter excludes all candidates.
-- 410 Gone - Mapping existed but is now revoked/expired (useful for caches).
-
-Servers SHOULD include Cache-Control and ETag headers. Clients MAY use conditional requests.
-
-# CT <-> Registration Synchronization
-
-The Discovery Service contains a continuous STI-CT monitor that auto-registers CPS URIs from certificates containing the CPS-URI extension.
-
-## Monitoring Behavior
-
-- Inputs - One or more CT logs recognized by the STI ecosystem.
-- Processing -  For each new/updated certificate:
-  1. Verify chain to STI trust roots.
-  2. Verify SCT(s) and inclusion (per CT client policy).
-  3. If the certificate contains a CPS-URI extension, extract the URI.
-  4. Extract TNAuthList entries (TNs, ranges, SPCs).
-  5. Create/update mappings in the registry with source: "ct".
-- Expiry - CT-derived mappings **MUST** be considered invalid after the certificate notAfter (plus an optional grace period ≤ 48h).
-- Revocation - If OCSP/CRL indicates revocation (when available), the service SHOULD immediately mark mappings as inactive.
+These certificates are submitted to one or more recognized STI-CT logs. Each submission yields a Signed Certificate Timestamp (SCT), which proves inclusion in the log and enables public verification.
+
+## Discovery via Log Monitoring
+
+Relying parties (e.g., Authentication Services, Verification Services, or intermediary discovery components) monitor STI-CT logs for new or updated certificates that include a CPS URI extension. Upon detection, the monitor performs the following steps:
+	
+1.	Verifies the certificate chain to a trusted STI root.
+2.	Validates the SCT(s) associated with the certificate.
+3.	Extracts the TNAuthList and the CPS URI extension.
+4.	Associates the covered TNs or SPCs with the CPS URI.
+
+The resulting mappings are used to determine the appropriate CPS endpoint during call placement and verification. This process allows discovery to be performed in real-time or asynchronously using CT log clients, without requiring direct interaction with the certificate holder or CPS operator.
+
+# End-to-End Process Summary
+
+1.	A delegate certificate is issued containing TNAuthList and CPS URI.
+2.	The certificate is logged in an STI-CT log, generating SCTs.
+3.	A monitoring system observes the log and extracts TN→CPS and SPC→CPS mappings.
+4.	Authentication or Verification Services consult the mappings to identify the CPS endpoint corresponding to a given TN or SPC.
+5.	PASSporTs are published or retrieved using the discovered CPS URI as part of the OOB authentication process.
+
+This approach removes the need for centralized registries, REST-based discovery interfaces, or bilateral provisioning agreements. All discovery is based on cryptographic credentials and public transparency logs, ensuring an auditable and interoperable discovery process.
+
+# Expected Monitor Behavior
+
+Parties that wish to perform CPS discovery may monitor one or more STI Certificate Transparency (STI-CT) logs for delegate certificates containing the CPS URI extension. Monitors are expected to:
+
+- Validate certificate chains to STI trust anchors.
+- Verify inclusion of certificates via Signed Certificate Timestamps (SCTs).
+- Extract the CPS URI and TNAuthList from certificates.
+- Associate telephone numbers or SPCs with the declared CPS URI.
+
+Monitors may use this information to enable Authentication Services (AS) or Verification Services (VS) to locate the appropriate CPS endpoint. Implementations may maintain local caches or registries based on the extracted data, respecting certificate validity periods and revocation status when available.
 
 # Conventions and Definitions
 
 {::boilerplate bcp14-tagged}
 
-
 # Security Considerations
 
-TODO Security
+The CPS discovery mechanism relies on the integrity of STIR delegate certificates and STI Certificate Transparency (STI-CT) logs. Several security considerations apply:
+
+- Misissued Certificates: A CPS URI could be falsely claimed in a certificate. Relying parties must validate that certificates are issued by trusted STIR Certification Authorities and verify TNAuthList accuracy during issuance.
+- Log Misbehavior: CT logs may omit or backdate entries. Implementations should monitor multiple CT logs and validate Signed Certificate Timestamps (SCTs) to ensure visibility and integrity.
+- Stale or Revoked Certificates: CPS mappings derived from expired or revoked certificates may lead to incorrect routing. Implementations should check certificate validity and revocation status before using extracted mappings.
+- Information Exposure: CPS URIs and TNAuthList entries are publicly logged. This may reveal operational details but does not introduce new exposures beyond existing STIR practices.
+
+This mechanism inherits the security properties of the STIR certificate infrastructure and CT logging, offering verifiable, auditable discovery without requiring bilateral trust.
 
 
 # IANA Considerations
